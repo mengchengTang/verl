@@ -114,6 +114,8 @@ def marked_timer(
 class NsightSystemsProfiler(DistProfiler):
     """Nsight system profiler. Installed in a worker to control the Nsight system profiler."""
 
+    _this_step = False
+
     def __init__(self, rank: int, config: Optional[ProfilerConfig], tool_config: Optional[NsightToolConfig], **kwargs):
         """Initialize the NsightSystemsProfiler.
 
@@ -129,7 +131,6 @@ class NsightSystemsProfiler(DistProfiler):
         self.enable = config.enable
         if not config.enable:
             return
-        self.this_step: bool = False
         self.discrete: bool = tool_config.discrete
         self.this_rank: bool = False
         if config.all_ranks:
@@ -139,13 +140,13 @@ class NsightSystemsProfiler(DistProfiler):
 
     def start(self, **kwargs):
         if self.enable and self.this_rank:
-            self.this_step = True
+            NsightSystemsProfiler._this_step = True
             if not self.discrete:
                 torch.cuda.profiler.start()
 
     def stop(self):
         if self.enable and self.this_rank:
-            self.this_step = False
+            NsightSystemsProfiler._this_step = False
             if not self.discrete:
                 torch.cuda.profiler.stop()
 
@@ -181,14 +182,14 @@ class NsightSystemsProfiler(DistProfiler):
 
                 profile_name = message or func.__name__
 
-                if self.this_step:
+                if NsightSystemsProfiler._this_step:
                     if self.discrete:
                         torch.cuda.profiler.start()
                     mark_range = mark_start_range(message=profile_name, color=color, domain=domain, category=category)
 
                 result = func(*args, **kwargs_inner)
 
-                if self.this_step:
+                if NsightSystemsProfiler._this_step:
                     mark_end_range(mark_range)
                     if self.discrete:
                         torch.cuda.profiler.stop()

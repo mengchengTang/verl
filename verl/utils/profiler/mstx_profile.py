@@ -160,6 +160,7 @@ class NPUProfiler(DistProfiler):
     """
 
     _define_count = 0
+    _this_step = False
 
     def __init__(self, rank: int, config: ProfilerConfig, tool_config: NPUToolConfig, **kwargs):
         """Initialize the NsightSystemsProfiler.
@@ -176,9 +177,7 @@ class NPUProfiler(DistProfiler):
         self.enable: bool = config.enable
         if not config.enable:
             return
-        self.this_step: bool = False
         self.discrete: bool = tool_config.discrete
-        self.this_rank: bool = False
         self.profile_npu = None
         self.profile_contents = tool_config.contents
         self.profile_level = tool_config.level
@@ -193,7 +192,7 @@ class NPUProfiler(DistProfiler):
         role, profile_step = kwargs.get("role", None), kwargs.get("profile_step", None)
         profile_step = str(profile_step) if profile_step is not None else None
         if self.enable and self.this_rank:
-            self.this_step = True
+            NPUProfiler._this_step = True
             if not self.discrete and NPUProfiler._define_count == 0:
                 self.profile_npu = get_npu_profiler(
                     contents=self.profile_contents,
@@ -208,7 +207,7 @@ class NPUProfiler(DistProfiler):
 
     def stop(self):
         if self.enable and self.this_rank:
-            self.this_step = False
+            NPUProfiler._this_step = False
             if not self.discrete and NPUProfiler._define_count == 1:
                 self.profile_npu.step()
                 self.profile_npu.stop()
@@ -235,7 +234,7 @@ class NPUProfiler(DistProfiler):
 
                 profile_name = message or func.__name__
                 discrete_mode = self.discrete
-                profile_enable = self.this_step and self.enable
+                profile_enable = NPUProfiler._this_step and self.enable
 
                 if not profile_enable:
                     return func(*args, **kwargs_inner)
