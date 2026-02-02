@@ -124,21 +124,21 @@ Discrete Mode Collection
                      discrete: True  # Must be enabled in Agent Loop mode
          # ref follow actor settings
 
-**Agent Loop Scenario Description**:
+**Agent Loop Mode Description**:
 
-When Rollout runs in `Agent Loop <../advance/agent_loop.rst>`_ mode, performance data for the Rollout phase **must be collected using discrete mode**. At this time, the Profiler is triggered by the inference engine backend.
+When Rollout runs in `Agent Loop <../advance/agent_loop.rst>`_ mode, performance data for the Rollout phase **must be collected using discrete mode**. In this case, the Profiler is triggered by the inference engine backend.
 
-1. **Rank Meaning**: ``ranks`` in the Rollout config refers to the **Replica Rank** (instance index), not the global rank.
-2. **Inference Engine Description**:
+1. **Rank Definition**: ``ranks`` in the Rollout configuration refers to **Replica Rank** (inference instance index), not Global Rank.
+2. **Inference Engine Support**:
 
-   Both vLLM and SGLang engines automatically read profiler configuration from the configuration file. No additional setup is required.
+   Both vLLM and SGLang engines automatically read Profiler configuration; no additional setup is required. Specific differences are as follows:
 
    - **vLLM Engine**
-      - Automatically collects profiler data including Python call stacks from ``AsyncLLM`` and inference process.
+      - Automatically collects ``AsyncLLM`` scheduling stacks and inference process performance data. Does not support setting ``analysis`` (defaults to no analysis, requires offline analysis) and ``profiler_level`` (defaults to level1).
 
    - **SGLang Engine**
-      - Automatically uses the settings from the configuration file.
-      - Note: SGLang currently does not support ``memory`` in the ``contents`` configuration.
+      - Automatically reads configuration from the config file.
+      - Note: SGLang currently does not support the ``memory`` option in ``contents``. Does not support setting ``analysis`` (defaults to analysis enabled) and ``profiler_level`` (defaults to level0).
 
 
 Visualization
