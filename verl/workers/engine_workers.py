@@ -18,7 +18,7 @@ from contextlib import nullcontext
 from copy import deepcopy
 from functools import partial
 from itertools import chain
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 from codetiming import Timer
@@ -37,6 +37,7 @@ from verl.utils.distributed import initialize_global_process_group_ray, set_numa
 from verl.utils.flops_counter import FlopsCounter
 from verl.utils.memory_utils import aggressive_empty_cache
 from verl.utils.metric.utils import Metric
+from verl.utils.monitor import trace_op, init
 from verl.utils.profiler import DistProfiler, DistProfilerExtension, ProfilerConfig, log_gpu_memory_usage
 from verl.utils.py_functional import append_to_dict
 from verl.utils.tensordict_utils import maybe_fix_3d_position_ids
@@ -54,6 +55,14 @@ from verl.workers.utils.losses import ppo_loss
 
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
+
+
+def _actor_rollout_ref_monitor_trace_labels(worker: "ActorRolloutRefWorker") -> dict[str, Any]:
+    return {
+        "worker.role": worker.role,
+        "worker.rank": str(worker.rank),
+        "worker.world_size": str(worker.world_size),
+    }
 
 
 def _with_routing_replay_flag(enabled: bool):
@@ -447,6 +456,7 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
         self.distillation_config = distillation_config
         self.distillation_enabled = is_distillation_enabled(distillation_config)
         self.role = role
+        init("verl_test_namespace")
         self.actor: TrainingWorker = None
         self.ref: TrainingWorker = None
         self.rollout: BaseRollout = None
@@ -624,6 +634,7 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
     @register(dispatch_mode=make_nd_compute_dataproto_dispatch_fn(mesh_name="ref"))
     @DistProfiler.annotate(color="olive", role="ref_compute_log_prob")
     @_with_routing_replay_flag(enabled=False)
+    @trace_op("actor_rollout_ref.compute_ref_log_prob", extra_labels=_actor_rollout_ref_monitor_trace_labels)
     def compute_ref_log_prob(self, data: TensorDict) -> TensorDict:
         output = self.ref.infer_batch(data=data)
         return output.cpu() if output is not None else None
@@ -631,6 +642,7 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
     @register(dispatch_mode=make_nd_compute_dataproto_dispatch_fn(mesh_name="actor"))
     @DistProfiler.annotate(color="blue", role="actor_compute_log_prob")
     @_with_routing_replay_flag(enabled=True)
+    @trace_op("actor_rollout_ref.compute_log_prob", extra_labels=_actor_rollout_ref_monitor_trace_labels)
     def compute_log_prob(self, data: TensorDict) -> TensorDict:
         output = self.actor.infer_batch(data)
 
@@ -639,6 +651,7 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
     @register(dispatch_mode=make_nd_compute_dataproto_dispatch_fn(mesh_name="actor"))
     @DistProfiler.annotate(color="red", role="actor_update")
     @_with_routing_replay_flag(enabled=True)
+    @trace_op("actor_rollout_ref.update_actor", extra_labels=_actor_rollout_ref_monitor_trace_labels)
     def update_actor(self, data: TensorDict) -> TensorDict:
         output = self.actor.train_mini_batch(data=data)
         return output.cpu() if output is not None else None

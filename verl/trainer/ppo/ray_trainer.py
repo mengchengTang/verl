@@ -19,6 +19,7 @@ This trainer supports model-agonistic model initialization with huggingface
 """
 
 import json
+import math
 import os
 import uuid
 from collections import defaultdict
@@ -65,6 +66,8 @@ from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.debug import marked_timer
 from verl.utils.import_utils import load_class_from_fqn
 from verl.utils.metric import reduce_metrics
+from verl.utils.monitor import init as monitor_init
+from verl.utils.monitor import metric_value
 from verl.utils.py_functional import rename_dict
 from verl.utils.rollout_skip import RolloutSkip
 from verl.utils.seqlen_balancing import calculate_workload, get_seqlen_balanced_partitions, log_seqlen_unbalance
@@ -1281,6 +1284,35 @@ class RayPPOTrainer:
             critic_output = self.critic_wg.update_critic(batch)
         return critic_output
 
+    @staticmethod
+    def _metric_to_float(value: Any) -> float | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, torch.Tensor):
+            if value.numel() != 1:
+                return None
+            value = value.detach().cpu().item()
+        elif isinstance(value, np.generic):
+            value = value.item()
+        if not isinstance(value, (int, float)):
+            return None
+        value = float(value)
+        if not math.isfinite(value):
+            return None
+        return value
+
+    def _emit_prometheus_metrics(self, metrics: dict[str, Any]) -> None:
+        for name, value in metrics.items():
+            scalar = self._metric_to_float(value)
+            if scalar is None:
+                continue
+            metric_value(
+                "trainer_metric_value",
+                scalar,
+                documentation="PPO trainer scalar metrics",
+                metric=name,
+            )
+
     def fit(self):
         """
         The training loop of PPO.
@@ -1298,6 +1330,7 @@ class RayPPOTrainer:
             default_backend=self.config.trainer.logger,
             config=OmegaConf.to_container(self.config, resolve=True),
         )
+        monitor_init("verl_test_namespace")
 
         self.global_steps = 0
 
@@ -1313,6 +1346,7 @@ class RayPPOTrainer:
             val_metrics = self._validate()
             assert val_metrics, f"{val_metrics=}"
             pprint(f"Initial validation metrics: {val_metrics}")
+            self._emit_prometheus_metrics(val_metrics)
             logger.log(data=val_metrics, step=self.global_steps)
             if self.config.trainer.get("val_only", False):
                 return
@@ -1661,6 +1695,7 @@ class RayPPOTrainer:
                     self.train_dataloader.sampler.update(batch=batch)
 
                 # TODO: make a canonical logger that supports various backend
+                self._emit_prometheus_metrics(metrics)
                 logger.log(data=metrics, step=self.global_steps)
 
                 progress_bar.update(1)

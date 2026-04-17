@@ -36,6 +36,8 @@ from vllm.v1.engine.async_llm import AsyncLLM
 
 from verl.utils.config import omega_conf_to_dataclass
 from verl.utils.device import get_resource_name, get_visible_devices_keyword, is_torch_npu_available
+from verl.utils.monitor import init as monitor_init
+from verl.utils.monitor import trace_state
 from verl.utils.net_utils import get_free_port, is_valid_ipv6_address
 from verl.utils.profiler import DistProfiler, build_vllm_profiler_args
 from verl.utils.tokenizer import normalize_token_ids
@@ -112,6 +114,7 @@ class vLLMHttpServer:
         self.config = self._init_config(config)
         self.model_config = self._init_model_config(model_config)
         self._validate_configs()
+        monitor_init("verl_test_namespace")
 
         self.rollout_mode = rollout_mode
         self.workers = workers
@@ -437,6 +440,27 @@ class vLLMHttpServer:
         self.task.add_done_callback(on_run_headless_done)
 
     async def generate(
+        self,
+        prompt_ids: list[int],
+        sampling_params: dict[str, Any],
+        request_id: str,
+        image_data: Optional[list[Any]] = None,
+        video_data: Optional[list[Any]] = None,
+        priority: int = 0,
+    ) -> TokenOutput:
+        with trace_state(
+            "vllm_replica_generate",
+        ):
+            return await self._generate(
+                prompt_ids=prompt_ids,
+                sampling_params=sampling_params,
+                request_id=request_id,
+                image_data=image_data,
+                video_data=video_data,
+                priority=priority,
+            )
+
+    async def _generate(
         self,
         prompt_ids: list[int],
         sampling_params: dict[str, Any],

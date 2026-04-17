@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict
 from tensordict import TensorDict
 from transformers import AutoProcessor, AutoTokenizer
 
-from verl.experimental.agent_loop.prometheus_utils import update_prometheus_config
+from verl.utils.monitor import update_prometheus_config
 from verl.experimental.agent_loop.utils import resolve_config_path
 from verl.experimental.teacher_loop import TeacherModelManager
 from verl.protocol import DataProto
