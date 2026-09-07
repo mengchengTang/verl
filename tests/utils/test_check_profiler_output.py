@@ -68,8 +68,8 @@ class ProfilerChecker:
             self.config = DeviceCheckConfig(
                 # NPU search pattern: match ascend subdirectory under stage
                 search_pattern=os.path.join(self.profiler_dir, "{stage}", "*_ascend_*"),
-                # NPU: rollout requires >1 dir, others require exactly 1 dir
-                dir_count_validator=lambda stage, dirs: (len(dirs) > 1 if stage == "*_rollout_*" else len(dirs) == 1),
+                # Each stage needs output; multiple ranks or windows may produce multiple directories.
+                dir_count_validator=lambda stage, dirs: len(dirs) > 0,
                 # NPU: PROF_* subdirectory must exist and be a valid directory
                 prof_validator=lambda d: (
                     len(glob.glob(os.path.join(d, "PROF_*"))) > 0
@@ -81,11 +81,16 @@ class ProfilerChecker:
         """Generic stage directory validation: extracted common logic for GPU/NPU"""
         # 1. Generate search path and match directories
         search_pattern = self.config.search_pattern.format(stage=stage)
-        dirs = glob.glob(search_pattern, recursive=True)
+        dirs = [path for path in glob.glob(search_pattern, recursive=True) if os.path.isdir(path)]
 
         # 2. Log found directories
+        logger.info(f"[{stage}] Found {len(dirs)} profiler directories (pattern: {search_pattern})")
         for d in dirs:
             logger.info(f"[{stage}] Found: {d}")
+
+        if not self.config.dir_count_validator(stage, dirs):
+            logger.error(f"[{stage}] Unexpected profiler directory count: {len(dirs)} (pattern: {search_pattern})")
+            return False
 
         # 3. Validate PROF files/directories
         for target_dir in dirs:
