@@ -81,7 +81,11 @@ class ProfilerChecker:
         """Generic stage directory validation: extracted common logic for GPU/NPU"""
         # 1. Generate search path and match directories
         search_pattern = self.config.search_pattern.format(stage=stage)
-        dirs = glob.glob(search_pattern, recursive=True)
+        dirs = [path for path in glob.glob(search_pattern, recursive=True) if os.path.isdir(path)]
+
+        if not self.config.dir_count_validator(stage, dirs):
+            logger.error(f"[{stage}] Unexpected profiler directory count: {len(dirs)} (pattern: {search_pattern})")
+            return False
 
         # 2. Log found directories
         for d in dirs:
