@@ -58,9 +58,7 @@ class ProfilerChecker:
         """Initialize validation rules for different devices (core: device differences as config)"""
         if self.device_type == "gpu":
             self.config = DeviceCheckConfig(
-                search_patterns=lambda stage: [
-                    os.path.join(f"*{stage}*", "**", "*.json*"), f"*{stage}*.json*"
-                ],
+                search_patterns=lambda stage: [os.path.join(f"*{stage}*", "**", "*.json*"), f"*{stage}*.json*"],
                 path_filter=lambda p: os.path.isfile(p) and p.endswith((".json", ".json.gz")),
                 count_validator=lambda stage, paths: len(paths) > 0,
                 prof_validator=lambda p: os.path.getsize(p) > 0,
@@ -82,10 +80,14 @@ class ProfilerChecker:
     def _validate_stage(self, stage: str) -> bool:
         """Match, log and validate the stage's profiler output."""
         patterns = [os.path.join(self.profiler_dir, p) for p in self.config.search_patterns(stage)]
-        paths = sorted({
-            path for pattern in patterns for path in glob.glob(pattern, recursive=True)
-            if self.config.path_filter(path)
-        })
+        paths = sorted(
+            {
+                path
+                for pattern in patterns
+                for path in glob.glob(pattern, recursive=True)
+                if self.config.path_filter(path)
+            }
+        )
         logger.info(f"[{stage}] Found {len(paths)} profiler paths (patterns: {patterns})")
         for path in paths:
             logger.info(f"[{stage}] Found: {path}")
